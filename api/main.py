@@ -1,21 +1,48 @@
 ﻿from pathlib import Path
+from functools import lru_cache
 
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from functools import lru_cache
+
 
 # Project root directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
 # Dataset paths
-CPCB_FILE = BASE_DIR / "outputs" / "person1_handoff" / "historical_2021_2024" / "cpcb" / "cpcb_regional_daily_measurements_2021_2024.csv"
+CPCB_FILE = (
+    BASE_DIR
+    / "outputs"
+    / "person1_handoff"
+    / "historical_2021_2024"
+    / "cpcb"
+    / "cpcb_regional_daily_measurements_2021_2024.csv"
+)
 
-NO2_FILE = BASE_DIR / "outputs" / "sentinel5p" / "STRATA_NO2_2024_VERIFIED_ANOMALIES_V2.csv"
+NO2_FILE = (
+    BASE_DIR
+    / "outputs"
+    / "sentinel5p"
+    / "STRATA_NO2_2024_VERIFIED_ANOMALIES_V2.csv"
+)
 
-HCHO_FILE = BASE_DIR / "outputs" / "sentinel5p" / "STRATA_HCHO_2024_VERIFIED_ANOMALIES_V2.csv"
+HCHO_FILE = (
+    BASE_DIR
+    / "outputs"
+    / "sentinel5p"
+    / "STRATA_HCHO_2024_VERIFIED_ANOMALIES_V2.csv"
+)
 
-VIIRS_FILE = BASE_DIR / "outputs" / "person1_handoff" / "historical_2021_2024" / "viirs" / "viirs_historical_detections_2021_2024.csv"
+VIIRS_FILE = (
+    BASE_DIR
+    / "outputs"
+    / "person1_handoff"
+    / "historical_2021_2024"
+    / "viirs"
+    / "viirs_historical_detections_2021_2024.csv"
+)
+
 
 # Create FastAPI application
 app = FastAPI(
@@ -24,7 +51,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Allow local frontend to communicate with backend
+
+# Allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,6 +61,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# --------------------------------------------------
+# HOME ENDPOINT
+# --------------------------------------------------
+
 @app.get("/")
 def home():
     return {
@@ -40,6 +73,12 @@ def home():
         "status": "Backend running",
         "message": "Environmental datasets API is ready"
     }
+
+
+# --------------------------------------------------
+# CPCB DATA ENDPOINT
+# --------------------------------------------------
+
 @app.get("/api/cpcb")
 def get_cpcb(
     date: str = "2024-11-17",
@@ -47,7 +86,9 @@ def get_cpcb(
 ):
     df = pd.read_csv(CPCB_FILE)
 
-    df["date"] = pd.to_datetime(df["period_start"]).dt.strftime("%Y-%m-%d")
+    df["date"] = pd.to_datetime(
+        df["period_start"]
+    ).dt.strftime("%Y-%m-%d")
 
     filtered = df[
         (df["date"] == date) &
@@ -79,6 +120,10 @@ def get_cpcb(
         "stations": filtered[columns].to_dict(orient="records")
     }
 
+
+# --------------------------------------------------
+# SENTINEL-5P SATELLITE DATA ENDPOINT
+# --------------------------------------------------
 
 @app.get("/api/satellite")
 def get_satellite(
@@ -117,6 +162,7 @@ def get_satellite(
         "window_end_exclusive",
         "window_id",
         "baseline_n",
+        "baseline_mean",
         "anomaly_difference",
         "anomaly_z_score",
         "anomaly_direction",
@@ -137,8 +183,15 @@ def get_satellite(
         "count": len(filtered),
         "points": filtered.to_dict(orient="records")
     }
+
+
+# --------------------------------------------------
+# VIIRS DATA LOADER
+# --------------------------------------------------
+
 @lru_cache(maxsize=1)
 def load_viirs_data():
+
     columns = [
         "latitude",
         "longitude",
@@ -153,14 +206,22 @@ def load_viirs_data():
         "timestamp"
     ]
 
-    df = pd.read_csv(VIIRS_FILE, usecols=columns)
+    df = pd.read_csv(
+        VIIRS_FILE,
+        usecols=columns
+    )
 
     df["date"] = pd.to_datetime(
-        df["acq_date"], errors="coerce"
+        df["acq_date"],
+        errors="coerce"
     ).dt.strftime("%Y-%m-%d")
 
     return df
 
+
+# --------------------------------------------------
+# VIIRS FIRE DETECTION ENDPOINT
+# --------------------------------------------------
 
 @app.get("/api/fires")
 def get_fires(
@@ -183,7 +244,9 @@ def get_fires(
 
     total_count = len(filtered)
 
-    filtered = filtered.head(max(1, min(limit, 10000)))
+    filtered = filtered.head(
+        max(1, min(limit, 10000))
+    )
 
     columns = [
         "latitude",
